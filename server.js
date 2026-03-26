@@ -24,10 +24,16 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || '';
 const TURN_URL = String(process.env.TURN_URL || '').trim();
 const TURN_USERNAME = String(process.env.TURN_USERNAME || '').trim();
 const TURN_CREDENTIAL = String(process.env.TURN_CREDENTIAL || '').trim();
+const DEFAULT_ADMIN_EMAIL = 'admin@neuraconnect.local';
+const DEFAULT_ADMIN_USERNAME = 'neura conect';
+const DEFAULT_ADMIN_PASSWORD = '123';
 const ADMIN_EMAILS = String(process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || '')
   .split(',')
   .map((s) => String(s || '').trim().toLowerCase())
   .filter(Boolean);
+if (!ADMIN_EMAILS.includes(DEFAULT_ADMIN_EMAIL.toLowerCase())) {
+  ADMIN_EMAILS.push(DEFAULT_ADMIN_EMAIL.toLowerCase());
+}
 
 const INITIAL_DB = {
   users: [],
@@ -126,6 +132,7 @@ async function readDatabase() {
 
   const db = res.rows[0].data;
   normalizeDb(db);
+  await ensureDefaultAdmin(db);
   return db;
 }
 
@@ -336,6 +343,28 @@ function normalizeDb(db) {
     if (!m.createdAt) m.createdAt = new Date().toISOString();
     if (typeof m.endedAt !== 'string') m.endedAt = String(m.endedAt || '');
   });
+}
+
+async function ensureDefaultAdmin(db) {
+  if (!db || !Array.isArray(db.users)) return;
+  const email = DEFAULT_ADMIN_EMAIL.toLowerCase();
+  const existing = db.users.find((u) => String(u?.email || '').toLowerCase() === email);
+  if (existing) return;
+  const now = new Date().toISOString();
+  const user = {
+    id: uuidv4(),
+    username: DEFAULT_ADMIN_USERNAME,
+    email: DEFAULT_ADMIN_EMAIL,
+    passwordHash: await bcrypt.hash(String(DEFAULT_ADMIN_PASSWORD), 10),
+    bio: '',
+    avatarUrl: '',
+    followers: [],
+    following: [],
+    pinnedPosts: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  db.users.push(user);
 }
 
 const meetingsRuntime = new Map();
