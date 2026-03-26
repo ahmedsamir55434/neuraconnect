@@ -105,10 +105,12 @@ async function loadSeedDatabase() {
     const parsed = JSON.parse(raw);
     const merged = { ...cloneInitialDb(), ...(parsed || {}) };
     normalizeDb(merged);
+    await ensureDefaultAdmin(merged);
     return merged;
   } catch {
     const fallback = cloneInitialDb();
     normalizeDb(fallback);
+    await ensureDefaultAdmin(fallback);
     return fallback;
   }
 }
@@ -132,7 +134,10 @@ async function readDatabase() {
 
   const db = res.rows[0].data;
   normalizeDb(db);
-  await ensureDefaultAdmin(db);
+  const changed = await ensureDefaultAdmin(db);
+  if (changed) {
+    await writeDatabase(db);
+  }
   return db;
 }
 
@@ -349,7 +354,7 @@ async function ensureDefaultAdmin(db) {
   if (!db || !Array.isArray(db.users)) return;
   const email = DEFAULT_ADMIN_EMAIL.toLowerCase();
   const existing = db.users.find((u) => String(u?.email || '').toLowerCase() === email);
-  if (existing) return;
+  if (existing) return false;
   const now = new Date().toISOString();
   const user = {
     id: uuidv4(),
@@ -365,6 +370,7 @@ async function ensureDefaultAdmin(db) {
     updatedAt: now,
   };
   db.users.push(user);
+  return true;
 }
 
 const meetingsRuntime = new Map();
